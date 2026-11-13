@@ -10,24 +10,24 @@ namespace SalonCoiffure
     public class ToolDef
     {
         public ToolType type;
-        public string name, hint;
+        public string name, hint, icon;
         public float radius;
-        public ToolDef(ToolType t, string n, float r, string h) { type = t; name = n; radius = r; hint = h; }
+        public ToolDef(ToolType t, string n, string ic, float r, string h) { type = t; name = n; icon = ic; radius = r; hint = h; }
     }
 
     public static class ToolCatalog
     {
         static readonly Dictionary<ToolType, ToolDef> defs = new Dictionary<ToolType, ToolDef>
         {
-            { ToolType.Main, new ToolDef(ToolType.Main, "Tourner la vue", 0f, "Glisse pour tourner autour de la cliente.") },
-            { ToolType.Douchette, new ToolDef(ToolType.Douchette, "Douchette", 0.055f, "Mouille et rince les cheveux. Rince aussi la coloration.") },
-            { ToolType.Shampoing, new ToolDef(ToolType.Shampoing, "Shampoing", 0.045f, "Masse les cheveux mouillés pour faire mousser.") },
-            { ToolType.Soin, new ToolDef(ToolType.Soin, "Après-shampoing", 0.05f, "Applique le soin sur les longueurs mouillées.") },
-            { ToolType.Serviette, new ToolDef(ToolType.Serviette, "Serviette", 0.07f, "Essore les cheveux en douceur.") },
-            { ToolType.Ciseaux, new ToolDef(ToolType.Ciseaux, "Ciseaux", 0.012f, "Coupe les mèches exactement là où tu passes.") },
-            { ToolType.Tondeuse, new ToolDef(ToolType.Tondeuse, "Tondeuse", 0.03f, "Passe sur le crâne : coupe à la hauteur du sabot.") },
-            { ToolType.Pinceau, new ToolDef(ToolType.Pinceau, "Pinceau", 0.022f, "Peins la coloration sur les mèches.") },
-            { ToolType.Seche, new ToolDef(ToolType.Seche, "Sèche-cheveux", 0.08f, "Sèche les cheveux et leur redonne du volume.") },
+            { ToolType.Main, new ToolDef(ToolType.Main, "Regarder", "tourner", 0f, "Glisse pour tourner autour de la cliente.") },
+            { ToolType.Douchette, new ToolDef(ToolType.Douchette, "Douchette", "douchette", 0.075f, "Passe sur les cheveux pour mouiller, rincer la mousse et la coloration.") },
+            { ToolType.Shampoing, new ToolDef(ToolType.Shampoing, "Shampoing", "shampoing", 0.065f, "Frotte les cheveux mouillés pour faire mousser.") },
+            { ToolType.Soin, new ToolDef(ToolType.Soin, "Soin", "soin", 0.07f, "Applique le soin sur les longueurs (cheveux mouillés).") },
+            { ToolType.Serviette, new ToolDef(ToolType.Serviette, "Serviette", "serviette", 0.09f, "Essore en frottant.") },
+            { ToolType.Ciseaux, new ToolDef(ToolType.Ciseaux, "Ciseaux", "ciseaux", 0.011f, "Trace un trait à travers les mèches : elles sont coupées le long du trait.") },
+            { ToolType.Tondeuse, new ToolDef(ToolType.Tondeuse, "Tondeuse", "tondeuse", 0.035f, "Passe sur le crâne : coupe à la hauteur du sabot.") },
+            { ToolType.Pinceau, new ToolDef(ToolType.Pinceau, "Pinceau", "pinceau", 0.03f, "Peins la coloration sur les mèches.") },
+            { ToolType.Seche, new ToolDef(ToolType.Seche, "Séchoir", "seche", 0.1f, "Passe partout pour sécher et donner du volume.") },
         };
 
         public static ToolDef Get(ToolType t) { return defs[t]; }
@@ -36,16 +36,19 @@ namespace SalonCoiffure
         {
             switch (s)
             {
-                case Stage.Coloration: return new[] { ToolType.Pinceau, ToolType.Main };
-                case Stage.Bac: return new[] { ToolType.Douchette, ToolType.Shampoing, ToolType.Soin, ToolType.Serviette, ToolType.Main };
-                case Stage.Coupe: return new[] { ToolType.Ciseaux, ToolType.Tondeuse, ToolType.Main };
-                case Stage.Sechage: return new[] { ToolType.Seche, ToolType.Serviette, ToolType.Main };
-                default: return new[] { ToolType.Main };
+                case Stage.Coloration: return new[] { ToolType.Pinceau };
+                case Stage.Bac: return new[] { ToolType.Douchette, ToolType.Shampoing, ToolType.Soin, ToolType.Serviette };
+                case Stage.Coupe: return new[] { ToolType.Ciseaux, ToolType.Tondeuse };
+                case Stage.Sechage: return new[] { ToolType.Seche, ToolType.Serviette };
+                default: return new ToolType[0];
             }
         }
     }
 
-    /// <summary>Applique l'outil choisi là où le doigt / la souris appuie.</summary>
+    /// <summary>
+    /// Applique l'outil choisi. Règle simple : si on appuie SUR la cliente, l'outil agit ;
+    /// si on appuie à côté, on tourne la caméra.
+    /// </summary>
     public class ToolController
     {
         public ToolType Current = ToolType.Main;
@@ -53,35 +56,87 @@ namespace SalonCoiffure
         public int ZoneFilter = -1;
         public int SabotIndex = 3;
         public int DyeIndex = 6;
-        public bool PointerActive;
-        public Vector2 PointerPos; // écran, origine en bas à gauche
-        public bool PointerOverHair;
+
+        public bool PointerActive;      // l'outil travaille
+        public Vector2 PointerPos;      // écran, origine en bas à gauche
+        public Vector2 HoverPos;
+        public bool HoverValid;
+        public bool OverClient;         // le pointeur survole la cliente
+        public Vector3 HitPoint;
 
         public static readonly int[] SabotMm = { 1, 3, 6, 9, 12, 16, 19, 22, 25 };
 
         public string Feedback = "";
         public float FeedbackTime;
 
-        float snipTimer, clipTimer, bubbleTimer, scalpTimer;
+        float snipTimer, clipTimer, bubbleTimer, probeTimer;
+        Vector2 lastCutPos;
+        bool cutStarted;
         readonly List<Vector3> bubbleHits = new List<Vector3>();
 
         public ToolDef Def { get { return ToolCatalog.Get(Current); } }
         public float Radius { get { return Def.radius * SizeK; } }
 
-        public void Say(string msg, float seconds = 2.5f)
+        public void Say(string msg, float seconds = 2.6f)
         {
             Feedback = msg;
             FeedbackTime = seconds;
         }
 
+        /// <summary>Le point écran vise-t-il la cliente (tête / cheveux) ?</summary>
+        public bool IsOnClient(SalonGame g, Vector2 screenPos)
+        {
+            if (g.Client == null) return false;
+            Ray ray = g.MainCam.ScreenPointToRay(screenPos);
+            if (g.Client.Hair.RayHitsHead(ray, 0.05f)) return true;
+            Vector3 hit;
+            return g.Client.Hair.Probe(ray, 0.02f, out hit);
+        }
+
+        public void BeginStroke(Vector2 screenPos)
+        {
+            PointerActive = true;
+            PointerPos = screenPos;
+            lastCutPos = screenPos;
+            cutStarted = false;
+            snipTimer = 0;
+        }
+
+        public void EndStroke() { PointerActive = false; }
+
         public void Tick(SalonGame g, float dt)
         {
             FeedbackTime -= dt;
             var client = g.Client;
-            bool working = PointerActive && Current != ToolType.Main && client != null && !g.Busy;
-            float windAmp = 0.012f, windSpeed = 1.3f;
+            float windAmp = 0.01f, windSpeed = 1.3f;
             Vector3 windDir = new Vector3(1f, 0f, 0.3f).normalized;
+            Color dye = Shades.Dyes[DyeIndex].color;
 
+            // Survol : position de l'outil 3D
+            probeTimer -= dt;
+            if (client != null && Current != ToolType.Main && (HoverValid || PointerActive) && !g.Busy)
+            {
+                Vector2 p = PointerActive ? PointerPos : HoverPos;
+                Ray hr = g.MainCam.ScreenPointToRay(p);
+                Vector3 hit;
+                if (probeTimer <= 0 || PointerActive)
+                {
+                    probeTimer = 0.03f;
+                    OverClient = client.Hair.Probe(hr, Mathf.Max(0.01f, Radius * 0.6f), out hit);
+                    if (!OverClient && client.Hair.RayHitsHead(hr, 0.0f))
+                    {
+                        // vise le crâne : point approximatif sur l'ellipsoïde
+                        hit = hr.origin + hr.direction * (Vector3.Distance(hr.origin, g.HeadWorld) - 0.09f);
+                        OverClient = true;
+                    }
+                    if (OverClient) HitPoint = hit;
+                }
+                if (OverClient) g.Props.Show(Current, HitPoint, g.MainCam.transform.position, dye, PointerActive);
+                else g.Props.Hide();
+            }
+            else g.Props.Hide();
+
+            bool working = PointerActive && Current != ToolType.Main && client != null && !g.Busy;
             if (!working)
             {
                 g.Audio.StopLoop();
@@ -97,31 +152,26 @@ namespace SalonCoiffure
             {
                 case ToolType.Douchette:
                 {
-                    bool hadPaste = g.PoseRunning || g.Develop > 0;
-                    int n = hair.Water(ray, r, 2.5f * dt, g.Develop);
+                    int n = hair.Water(ray, r, 6f * dt, g.Develop);
                     g.Foam.RinseNear(ray, r);
-                    Vector3 hit;
-                    if (hair.Probe(ray, r, out hit))
-                        g.Foam.Spray(g.MainCam.transform.position + g.MainCam.transform.right * 0.12f - g.MainCam.transform.up * 0.05f, hit);
+                    g.Foam.Spray(HitPoint + (g.MainCam.transform.position - HitPoint).normalized * 0.07f, HitPoint);
                     g.Audio.Loop(g.Audio.Water, 0.5f);
                     if (n > 0 && g.PoseRunning)
                     {
                         g.PoseRunning = false;
                         Say("Rinçage avant la fin de la pose : la couleur sera moins intense.");
                     }
-                    scalpTimer -= dt;
-                    if (hadPaste && scalpTimer <= 0) { scalpTimer = 0.4f; client.SetScalpColor(hair.AverageRootColor()); }
                     break;
                 }
                 case ToolType.Shampoing:
                 {
                     bubbleHits.Clear();
-                    int n = hair.Lather(ray, r, 1.1f * dt, bubbleHits);
+                    int n = hair.Lather(ray, r, 2.6f * dt, bubbleHits);
                     if (n < 0) Say("Mouille d'abord les cheveux avec la douchette !");
                     bubbleTimer -= dt;
                     if (n > 0 && bubbleTimer <= 0)
                     {
-                        bubbleTimer = 0.04f;
+                        bubbleTimer = 0.03f;
                         foreach (var p in bubbleHits) g.Foam.SpawnBubble(p, client.Head);
                     }
                     g.Audio.Loop(g.Audio.Squish, 0.35f);
@@ -129,45 +179,61 @@ namespace SalonCoiffure
                 }
                 case ToolType.Soin:
                 {
-                    int n = hair.Condition(ray, r, 1.4f * dt);
+                    int n = hair.Condition(ray, r, 3f * dt);
                     if (n < 0) Say("Le soin s'applique sur cheveux mouillés.");
                     g.Audio.Loop(g.Audio.Squish, 0.25f);
                     break;
                 }
                 case ToolType.Serviette:
-                    hair.Dry(ray, r, 1.0f * dt, 0.45f);
+                    hair.Dry(ray, r, 2.2f * dt, 0.4f);
                     g.Audio.Loop(g.Audio.Towel, 0.4f);
                     break;
                 case ToolType.Seche:
-                    hair.Dry(ray, r, 0.45f * dt, 0f);
+                    hair.Dry(ray, r, 1.3f * dt, 0f);
                     windAmp = 0.07f; windSpeed = 9f;
                     windDir = g.MainCam.transform.forward;
                     g.Audio.Loop(g.Audio.Dryer, 0.45f);
                     break;
                 case ToolType.Ciseaux:
+                {
                     g.Audio.StopLoop();
-                    snipTimer -= dt;
-                    if (snipTimer <= 0)
+                    // trait continu : on échantillonne le geste tous les quelques pixels
+                    Vector2 from = cutStarted ? lastCutPos : PointerPos;
+                    float dist = Vector2.Distance(from, PointerPos);
+                    int steps = Mathf.Clamp(Mathf.CeilToInt(dist / 4f), 1, 40);
+                    int cut = 0;
+                    for (int i = 1; i <= steps; i++)
                     {
-                        snipTimer = 0.14f;
-                        hair.Cut(ray, r, ZoneFilter, g.Clippings);
-                        g.Audio.OneShot(g.Audio.Snip, 0.8f);
+                        Vector2 sp = Vector2.Lerp(from, PointerPos, (float)i / steps);
+                        cut += hair.Cut(g.MainCam.ScreenPointToRay(sp), r, ZoneFilter, g.Clippings);
+                    }
+                    if (!cutStarted) cut += hair.Cut(ray, r, ZoneFilter, g.Clippings);
+                    cutStarted = true;
+                    lastCutPos = PointerPos;
+                    snipTimer -= dt;
+                    if (snipTimer <= 0 && (dist > 1f || cut > 0))
+                    {
+                        snipTimer = 0.11f;
+                        g.Audio.OneShot(g.Audio.Snip, cut > 0 ? 0.85f : 0.4f);
+                        g.Props.Snip();
                     }
                     break;
+                }
                 case ToolType.Tondeuse:
                     clipTimer -= dt;
                     if (clipTimer <= 0)
                     {
-                        clipTimer = 0.06f;
+                        clipTimer = 0.04f;
                         hair.Clip(ray, r, ZoneFilter, SabotMm[SabotIndex] / 1000f, g.Clippings);
                     }
                     g.Audio.Loop(g.Audio.Clipper, 0.4f);
                     break;
                 case ToolType.Pinceau:
                     g.Audio.StopLoop();
-                    if (g.PoseRunning) { Say("Temps de pose en cours… patiente ou rince au bac."); break; }
+                    if (g.PoseRunning) { Say("Temps de pose en cours : patiente ou va rincer au bac."); break; }
                     if (g.Develop > 0) { Say("Rince d'abord la coloration précédente au bac."); break; }
-                    hair.Paint(ray, r, ZoneFilter, Shades.Dyes[DyeIndex].color, 2.5f * dt);
+                    hair.Paint(ray, r, ZoneFilter, dye, 6f * dt);
+                    g.Audio.Loop(g.Audio.Squish, 0.15f);
                     break;
             }
             hair.SetWind(windDir, windAmp, windSpeed);

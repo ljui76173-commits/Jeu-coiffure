@@ -30,7 +30,8 @@ namespace SalonCoiffure
 
         public float scale;
         public GUIStyle panel, card, bubble, button, buttonOn, buttonSmall, buttonBig, title, h1, h2, label, labelCenter, small, smallCenter, chip, toast, stars, swatch;
-        public Texture2D white, round, ring, barBg;
+        public Texture2D white, round, ring, barBg, circle, shadow;
+        public GUIStyle topTitle, dockLabel, objective, objectiveDone, bigNext, iconButton, plain;
 
         public void Build(float s)
         {
@@ -42,6 +43,8 @@ namespace SalonCoiffure
                 round = ProcTex.RoundRect(r, 14, Color.white, Color.white, 0);
                 ring = ProcTex.Ring(128, 6, Color.white);
                 barBg = ProcTex.RoundRect(r, 30, new Color(0.88f, 0.84f, 0.79f, 1), new Color(0, 0, 0, 0), 0);
+                circle = ProcTex.RoundRect(128, 63, Color.white, Color.white, 0);
+                shadow = ProcTex.SoftShadow(96, 22, 14, 0.35f);
             }
             var panelTex = ProcTex.RoundRect(r, 18, new Color(Cream.r, Cream.g, Cream.b, 0.95f), Gold, 2.2f);
             var cardTex = ProcTex.RoundRect(r, 18, new Color(1f, 0.99f, 0.97f, 0.97f), new Color(Gold.r, Gold.g, Gold.b, 0.8f), 1.6f);
@@ -90,7 +93,20 @@ namespace SalonCoiffure
             toast.normal.textColor = Cream;
             stars = new GUIStyle { font = fz, fontSize = Fs(40), alignment = TextAnchor.MiddleCenter };
             stars.normal.textColor = Gold;
-            swatch = new GUIStyle { margin = Pad(3, 3, 3, 3), fixedWidth = s * 38f, fixedHeight = s * 38f };
+            swatch = new GUIStyle { margin = Pad(3, 3, 3, 3), fixedWidth = s * 36f, fixedHeight = s * 36f };
+            topTitle = new GUIStyle { font = fz, fontSize = Fs(26), fontStyle = FontStyle.Italic, alignment = TextAnchor.MiddleLeft };
+            topTitle.normal.textColor = Green;
+            dockLabel = new GUIStyle { font = fs, fontSize = Fs(13), alignment = TextAnchor.UpperCenter };
+            dockLabel.normal.textColor = Ink;
+            objective = new GUIStyle(label) { fontSize = Fs(15), alignment = TextAnchor.MiddleLeft, wordWrap = true, padding = Pad(30, 4, 2, 2) };
+            objectiveDone = new GUIStyle(objective);
+            objectiveDone.normal.textColor = SalonUtil.Hex("#4E7A5A");
+            var nextTex = ProcTex.RoundRect(r, 22, Gold, SalonUtil.Hex("#A8823E"), 2f);
+            var nextH = ProcTex.RoundRect(r, 22, SalonUtil.Hex("#D9B672"), SalonUtil.Hex("#A8823E"), 2f);
+            bigNext = new GUIStyle(button) { font = fz, fontSize = Fs(20), fixedHeight = s * 54f, fontStyle = FontStyle.Bold };
+            SetBg(bigNext, nextTex, nextH, nextTex, Color.white, Color.white, Color.white);
+            iconButton = new GUIStyle { };
+            plain = new GUIStyle(label);
         }
 
         int Fs(float px) { return Mathf.Max(8, Mathf.RoundToInt(px * scale)); }

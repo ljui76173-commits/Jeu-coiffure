@@ -18,7 +18,8 @@ namespace SalonCoiffure
 
         public float floorY = 0.002f;
         public int maxPieces = 160;
-        public readonly List<Vector3> TempPoints = new List<Vector3>(32);
+        readonly List<Vector3> tmp = new List<Vector3>(48);
+        Material ownMat;
 
         readonly List<Piece> pieces = new List<Piece>();
         readonly List<Vector3> v = new List<Vector3>();
@@ -64,6 +65,24 @@ namespace SalonCoiffure
                     idx.Add(a + 2); idx.Add(a + 1); idx.Add(a + 3);
                 }
             }
+        }
+
+        /// <summary>Ajoute des mèches coupées (espace de la tête) qui tomberont au sol.</summary>
+        public void AddPieces(List<CutPiece> list, Transform head, Material hairMat)
+        {
+            if (ownMat == null && hairMat != null)
+            {
+                ownMat = new Material(hairMat);
+                ownMat.SetVector("_HairWind", Vector4.zero);
+            }
+            BeginPiece();
+            foreach (var p in list)
+            {
+                tmp.Clear();
+                foreach (var q in p.pts) tmp.Add(head.TransformPoint(q));
+                AddStrip(tmp, p.color, p.halfWidth, p.wet);
+            }
+            EndPiece(ownMat);
         }
 
         public void EndPiece(Material mat)

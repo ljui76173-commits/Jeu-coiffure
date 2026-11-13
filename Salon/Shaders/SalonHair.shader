@@ -9,15 +9,18 @@ Shader "Salon/Hair"
         _SpecShift2 ("Décalage reflet secondaire", Range(-1, 1)) = -0.15
         _SpecExp1 ("Netteté reflet principal", Float) = 160
         _SpecExp2 ("Netteté reflet secondaire", Float) = 36
-        _SpecStrength1 ("Intensité reflet principal", Float) = 0.32
-        _SpecStrength2 ("Intensité reflet secondaire", Float) = 0.45
+        _SpecStrength1 ("Intensité reflet principal", Float) = 0.22
+        _SpecStrength2 ("Intensité reflet secondaire", Float) = 0.3
         _Wrap ("Diffusion douce", Range(0, 1)) = 0.5
+        _HairTex ("Carte de cheveux", 2D) = "white" {}
+        _Tiling ("Répétition le long de la mèche", Float) = 7
     }
 
     CGINCLUDE
     #include "UnityCG.cginc"
 
-    float _SpecShift1, _SpecShift2, _SpecExp1, _SpecExp2, _SpecStrength1, _SpecStrength2, _Wrap;
+    float _SpecShift1, _SpecShift2, _SpecExp1, _SpecExp2, _SpecStrength1, _SpecStrength2, _Wrap, _Tiling;
+    sampler2D _HairTex;
     float4 _HairWind;        // xyz = direction monde, w = amplitude
     float4 _HairWindParams;  // x = vitesse
     float4 _SalonLightDir;   // direction VERS la lumière principale
@@ -34,6 +37,7 @@ Shader "Salon/Hair"
         float4 color : COLOR;
         float2 uv0 : TEXCOORD0;   // x = côté du ruban, y = distance depuis la racine (m)
         float2 uv1 : TEXCOORD1;   // x = occlusion (couche), y = phase
+        float2 uv2 : TEXCOORD2;   // x = proximité de la pointe (0..1)
     };
 
     struct v2f
@@ -43,6 +47,7 @@ Shader "Salon/Hair"
         float3 tW : TEXCOORD1;
         float3 wPos : TEXCOORD2;
         float4 data : TEXCOORD3;
+        float tip : TEXCOORD4;
         float4 col : COLOR;
     };
 
@@ -66,6 +71,7 @@ Shader "Salon/Hair"
         o.wPos = w;
         o.data = float4(v.uv0, v.uv1);
         o.col = v.color;
+        o.tip = v.uv2.x;
         return o;
     }
 
@@ -78,8 +84,21 @@ Shader "Salon/Hair"
         return atten * pow(sTH, e);
     }
 
+    // Alpha de la carte (cheveux fins) ; les pointes s'affinent.
+    float CardAlpha(v2f i, out float shade)
+    {
+        float4 tx = tex2D(_HairTex, float2(i.data.x, i.data.y * _Tiling + i.data.w * 0.37));
+        shade = tx.r;
+        float th = lerp(0.5, 0.97, saturate(i.tip));
+        return tx.a - th;
+    }
+
     float4 fragHair(v2f i) : SV_Target
     {
+        float shade;
+        float ca = CardAlpha(i, shade);
+        float a = ca / max(fwidth(ca), 1e-4) + 0.5;
+        clip(a);
         float3 N = normalize(i.nW);
         float3 T = normalize(i.tW + 1e-5);
         float3 V = normalize(_WorldSpaceCameraPos.xyz - i.wPos);
@@ -87,7 +106,7 @@ Shader "Salon/Hair"
         float along = i.data.y;
         float ao = i.data.z;
 
-        float3 albedo = i.col.rgb * lerp(1.0, 0.55, wet);
+        float3 albedo = i.col.rgb * lerp(1.0, 0.55, wet) * lerp(0.8, 1.15, shade);
         float occl = ao * lerp(0.6, 1.0, saturate(along / 0.06));
 
         float3 L = normalize(_SalonLightDir.xyz + 1e-5);
@@ -110,16 +129,20 @@ Shader "Salon/Hair"
         // lumière qui traverse les mèches (contre-jour)
         float back = pow(saturate(dot(-V, L)), 4.0) * 0.3;
         col += albedo * _SalonLightColor.rgb * back;
-        return float4(col, 1.0);
+        return float4(col, saturate(a));
     }
 
     float4 fragDepth(v2f i) : SV_Target
     {
+        float shade;
+        clip(CardAlpha(i, shade));
         return float4(i.pos.z, 0, 0, 0);
     }
 
     float4 fragDepthNormals(v2f i) : SV_Target
     {
+        float shade;
+        clip(CardAlpha(i, shade));
         return float4(normalize(i.nW), 0.0);
     }
     ENDCG
@@ -135,6 +158,7 @@ Shader "Salon/Hair"
             Tags { "LightMode" = "UniversalForward" }
             Cull Off
             ZWrite On
+            AlphaToMask On
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment fragHair
@@ -178,6 +202,7 @@ Shader "Salon/Hair"
         {
             Cull Off
             ZWrite On
+            AlphaToMask On
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment fragHair

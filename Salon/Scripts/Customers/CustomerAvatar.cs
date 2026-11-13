@@ -1,10 +1,12 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SalonCoiffure
 {
     /// <summary>
-    /// Buste de la cliente (style « réaliste mais mignon ») : tête, visage, cou, cape de coiffure,
-    /// cuir chevelu et chevelure. Le pivot est au niveau de la poitrine.
+    /// Cliente en buste : visage sculpté (HeadGen), yeux qui suivent la caméra et clignent,
+    /// expressions (sourire / moue), cou, cape de coiffure et chevelure.
+    /// Le pivot est au niveau de la poitrine ; la tête est à HeadOffset.
     /// </summary>
     public class CustomerAvatar : MonoBehaviour
     {
@@ -14,10 +16,15 @@ namespace SalonCoiffure
         public HairSystem Hair { get; private set; }
         public CustomerProfile Profile { get; private set; }
 
-        Transform eyeL, eyeR;
-        Material scalpMat, browMat;
-        float blinkTimer = 2f, blinkT = -1f;
-        float idleT;
+        Transform eyeL, eyeR, lidL, lidR;
+        Quaternion eyeBaseL, eyeBaseR;
+        MeshFilter faceFilter;
+        HeadResult head;
+        readonly List<Object> owned = new List<Object>();
+        float blinkTimer = 2f, blinkT = -1f, idleT;
+        float smileNow, smileTarget, exprT = 1f;
+        Vector3[] exprFrom, exprTo, exprCur;
+        float lidOpen = -38f, lidClosed = 46f;
 
         public static CustomerAvatar Create(CustomerProfile profile, Transform parent, int strands, int segments)
         {
@@ -28,150 +35,150 @@ namespace SalonCoiffure
             return av;
         }
 
+        T Own<T>(T o) where T : Object { owned.Add(o); return o; }
+
+        GameObject Part(string name, Transform parent, Mesh mesh, Material mat, Vector3 pos, Quaternion rot, bool shadows = true)
+        {
+            var go = ProcMesh.MeshObject(name, parent, mesh, mat, shadows);
+            go.transform.localPosition = pos;
+            go.transform.localRotation = rot;
+            return go;
+        }
+
         void Build(CustomerProfile p, int strands, int segments)
         {
             Profile = p;
-            Color skin = p.skin;
-            var skinMat = Mats.Lit(skin, 0.38f);
-            var capeMat = Mats.Lit(SalonUtil.Hex("#25222B"), 0.62f);
-            var collarMat = Mats.Lit(SalonUtil.Hex("#F4EFE8"), 0.2f);
+            head = HeadGen.Build(p.face, 0f);
 
-            // Corps (cape de coiffure)
-            SalonUtil.Prim(PrimitiveType.Sphere, transform, Vector3.zero, new Vector3(0.42f, 0.30f, 0.24f), capeMat, true, "Epaules");
-            SalonUtil.Prim(PrimitiveType.Cylinder, transform, new Vector3(0, -0.33f, 0f), new Vector3(0.44f, 0.35f, 0.30f), capeMat, true, "Cape");
-            SalonUtil.Prim(PrimitiveType.Cylinder, transform, new Vector3(0, 0.155f, 0.005f), new Vector3(0.125f, 0.018f, 0.115f), collarMat, true, "Col");
-            SalonUtil.Prim(PrimitiveType.Cylinder, transform, new Vector3(0, 0.25f, 0.0f), new Vector3(0.095f, 0.11f, 0.09f), skinMat, true, "Cou");
+            var skinTex = Own(UnityConvert.ToTexture(head.skinTex, true, true));
+            var eyeTex = Own(UnityConvert.ToTexture(head.eyeTex, true, true));
+            var skinMat = Own(Mats.Lit(Color.white, 0.42f, 0f, skinTex, Vector2.one));
+            var skinPlain = Own(Mats.Lit(p.skin, 0.38f));
+            var eyeMat = Own(Mats.Lit(Color.white, 0.9f, 0f, eyeTex, Vector2.one));
+            var lashMat = Own(Mats.Lit(SalonMath.Hex("#1A1210"), 0.35f));
+            lashMat.SetFloat("_Cull", 0f);
+            var capeMat = Own(Mats.Lit(SalonMath.Hex("#24342E"), 0.58f));
+            var towelMat = Own(Mats.Lit(SalonMath.Hex("#F4EEE6"), 0.12f));
+
+            // Corps (espace tête, placé à HeadOffset sous le pivot du buste)
+            var body = new GameObject("Corps").transform;
+            body.SetParent(transform, false);
+            body.localPosition = HeadOffset;
+            Part("Cou", body, Own(UnityConvert.ToMesh(BodyGen.Neck())), skinPlain, Vector3.zero, Quaternion.identity);
+            Part("Cape", body, Own(UnityConvert.ToMesh(BodyGen.Cape(p.seed))), capeMat, Vector3.zero, Quaternion.identity);
+            Part("Col", body, Own(UnityConvert.ToMesh(BodyGen.Collar())), towelMat, Vector3.zero, Quaternion.identity);
 
             // Tête
-            var head = new GameObject("Tete").transform;
-            head.SetParent(transform, false);
-            head.localPosition = HeadOffset;
-            Head = head;
-            var headMesh = ProcMesh.Ellipsoid(HeadShape.R, 40, 64, HeadShape.Sculpt);
-            ProcMesh.MeshObject("Visage", head, headMesh, skinMat);
+            Head = new GameObject("Tete").transform;
+            Head.SetParent(transform, false);
+            Head.localPosition = HeadOffset;
+            faceFilter = Part("Visage", Head, Own(UnityConvert.ToMesh(head.head)), skinMat, Vector3.zero, Quaternion.identity).GetComponent<MeshFilter>();
+            Part("Oreilles", Head, Own(UnityConvert.ToMesh(head.ears)), skinPlain, Vector3.zero, Quaternion.identity);
+            Part("Cils", Head, Own(UnityConvert.ToMesh(head.lashes)), lashMat, Vector3.zero, Quaternion.identity, false);
 
-            // Cuir chevelu (couleur des cheveux sous les mèches)
-            scalpMat = Mats.Lit(SalonUtil.Mul(p.naturalHair.color, 0.85f), 0.2f);
-            var scalpMesh = ProcMesh.Ellipsoid(HeadShape.R * 1.006f, 40, 64, HeadShape.Sculpt, HairSystem.AcceptScalp);
-            ProcMesh.MeshObject("CuirChevelu", head, scalpMesh, scalpMat);
-
-            BuildFace(head, p, skin);
+            var eyeMesh = Own(UnityConvert.ToMesh(head.eyeball));
+            var lidMesh = Own(UnityConvert.ToMesh(head.lidUpper));
+            eyeL = MakeEye("OeilG", head.eyeL, head.eyeRotL, eyeMesh, eyeMat, lidMesh, skinPlain, out lidL);
+            eyeR = MakeEye("OeilD", head.eyeR, head.eyeRotR, eyeMesh, eyeMat, lidMesh, skinPlain, out lidR);
+            eyeBaseL = head.eyeRotL; eyeBaseR = head.eyeRotR;
 
             // Chevelure
             var hairGo = new GameObject("Chevelure");
-            hairGo.transform.SetParent(head, false);
+            hairGo.transform.SetParent(Head, false);
             Hair = hairGo.AddComponent<HairSystem>();
             Hair.Setup(p.HairConfig(), strands, segments, Mats.Hair());
         }
 
-        void BuildFace(Transform head, CustomerProfile p, Color skin)
+        Transform MakeEye(string name, Vector3 pos, Quaternion rot, Mesh eye, Material eyeMat, Mesh lid, Material lidMat, out Transform lidT)
         {
-            var white = Mats.Lit(SalonUtil.Hex("#FBF8F4"), 0.7f);
-            var iris = Mats.Lit(p.eyes, 0.8f);
-            var pupil = Mats.Lit(SalonUtil.Hex("#0D0A0A"), 0.9f);
-            var shine = Mats.Emissive(Color.white, new Color(0.9f, 0.9f, 0.9f));
-            var lash = Mats.Lit(SalonUtil.Hex("#1C1513"), 0.3f);
-            browMat = Mats.Lit(SalonUtil.Mul(p.naturalHair.color, 0.8f), 0.2f);
-            var lip = Mats.Lit(Color.Lerp(skin, SalonUtil.Hex("#C9646E"), 0.55f), 0.55f);
-            var blush = Mats.Lit(Color.Lerp(skin, SalonUtil.Hex("#F08C8C"), 0.28f), 0.3f);
-            var nose = Mats.Lit(Color.Lerp(skin, SalonUtil.Hex("#E7A08F"), 0.12f), 0.35f);
-            var skinMat = Mats.Lit(skin, 0.38f);
-
-            eyeL = Eye(head, -1, white, iris, pupil, shine, lash);
-            eyeR = Eye(head, 1, white, iris, pupil, shine, lash);
-
-            // Sourcils
-            for (int sgn = -1; sgn <= 1; sgn += 2)
-            {
-                Vector3 n;
-                Vector3 pos = HeadShape.FrontSurface(sgn * 0.035f, 0.033f, out n);
-                var rot = Quaternion.LookRotation(n) * Quaternion.Euler(0, 0, 90 + sgn * 8);
-                SalonUtil.Prim(PrimitiveType.Capsule, head, pos + n * 0.001f, new Vector3(0.0055f, 0.017f, 0.004f), browMat, rot, false, "Sourcil");
-            }
-
-            // Nez
-            {
-                Vector3 n;
-                Vector3 pos = HeadShape.FrontSurface(0f, -0.022f, out n);
-                SalonUtil.Prim(PrimitiveType.Sphere, head, pos - n * 0.003f, new Vector3(0.017f, 0.021f, 0.02f), nose, Quaternion.LookRotation(n), true, "Nez");
-            }
-
-            // Bouche
-            {
-                Vector3 n;
-                Vector3 pos = HeadShape.FrontSurface(0f, -0.051f, out n);
-                var rot = Quaternion.LookRotation(n);
-                SalonUtil.Prim(PrimitiveType.Sphere, head, pos - n * 0.002f, new Vector3(0.028f, 0.0075f, 0.012f), lip, rot, false, "LevreHaut");
-                pos = HeadShape.FrontSurface(0f, -0.059f, out n);
-                SalonUtil.Prim(PrimitiveType.Sphere, head, pos - n * 0.002f, new Vector3(0.025f, 0.0095f, 0.012f), lip, Quaternion.LookRotation(n), false, "LevreBas");
-            }
-
-            // Joues roses
-            for (int sgn = -1; sgn <= 1; sgn += 2)
-            {
-                Vector3 n;
-                Vector3 pos = HeadShape.FrontSurface(sgn * 0.05f, -0.028f, out n);
-                SalonUtil.Prim(PrimitiveType.Sphere, head, pos - n * 0.0028f, new Vector3(0.03f, 0.019f, 0.006f), blush, Quaternion.LookRotation(n), false, "Joue");
-            }
-
-            // Oreilles
-            for (int sgn = -1; sgn <= 1; sgn += 2)
-                SalonUtil.Prim(PrimitiveType.Sphere, head, new Vector3(sgn * HeadShape.R.x * 0.96f, -0.01f, -0.005f),
-                    new Vector3(0.02f, 0.036f, 0.027f), skinMat, true, "Oreille");
+            var pivot = new GameObject(name).transform;
+            pivot.SetParent(Head, false);
+            pivot.localPosition = pos;
+            pivot.localRotation = rot;
+            Part("Globe", pivot, eye, eyeMat, Vector3.zero, Quaternion.identity, false);
+            // la paupière ne tourne pas avec le regard : elle est sœur du globe, sous la tête
+            var lidPivot = new GameObject(name + "_Paupiere").transform;
+            lidPivot.SetParent(Head, false);
+            lidPivot.localPosition = pos;
+            lidPivot.localRotation = Quaternion.Euler(lidOpen, 0, 0);
+            Part("Paupiere", lidPivot, lid, lidMat, Vector3.zero, Quaternion.identity, false);
+            lidT = lidPivot;
+            return pivot;
         }
 
-        Transform Eye(Transform head, int sgn, Material white, Material iris, Material pupil, Material shine, Material lash)
+        /// <summary>Expression : 1 = grand sourire, 0 = neutre, -1 = moue.</summary>
+        public void SetExpression(float smile)
         {
-            Vector3 n;
-            Vector3 pos = HeadShape.FrontSurface(sgn * 0.034f, 0.006f, out n);
-            var eye = new GameObject(sgn < 0 ? "OeilG" : "OeilD").transform;
-            eye.SetParent(head, false);
-            eye.localPosition = pos - n * 0.004f;
-            eye.localRotation = Quaternion.LookRotation(n);
-            SalonUtil.Prim(PrimitiveType.Sphere, eye, Vector3.zero, new Vector3(0.027f, 0.021f, 0.013f), white, false, "Blanc");
-            SalonUtil.Prim(PrimitiveType.Sphere, eye, new Vector3(0, -0.0005f, 0.0042f), new Vector3(0.0155f, 0.0165f, 0.007f), iris, false, "Iris");
-            SalonUtil.Prim(PrimitiveType.Sphere, eye, new Vector3(0, -0.0005f, 0.0062f), new Vector3(0.0075f, 0.0085f, 0.004f), pupil, false, "Pupille");
-            SalonUtil.Prim(PrimitiveType.Sphere, eye, new Vector3(-0.003f, 0.003f, 0.0078f), new Vector3(0.0038f, 0.0038f, 0.002f), shine, false, "Reflet");
-            // Cils (paupière supérieure)
-            SalonUtil.Prim(PrimitiveType.Capsule, eye, new Vector3(0, 0.0085f, 0.0035f), new Vector3(0.0032f, 0.0155f, 0.003f), lash,
-                Quaternion.Euler(0, 0, 90 - sgn * 6), false, "Cils");
-            return eye;
+            smile = Mathf.Clamp(smile, -1f, 1f);
+            if (Mathf.Abs(smile - smileTarget) < 0.01f) return;
+            smileTarget = smile;
+            var md = HeadGen.BuildHeadMesh(Profile.face, smile);
+            exprFrom = faceFilter.sharedMesh.vertices;
+            exprTo = md.v.ToArray();
+            exprCur = new Vector3[exprTo.Length];
+            exprT = 0f;
         }
 
-        public void SetScalpColor(Color hairColor)
-        {
-            if (scalpMat == null) return;
-            Color c = SalonUtil.Mul(hairColor, 0.85f);
-            scalpMat.SetColor("_BaseColor", c);
-            scalpMat.SetColor("_Color", c);
-        }
+        public void SetScalpColor(Color c) { }
 
         void Update()
         {
-            // Clignement des yeux
-            blinkTimer -= Time.deltaTime;
+            float dt = Time.deltaTime;
+            idleT += dt;
+
+            // Clignement
+            blinkTimer -= dt;
             if (blinkTimer <= 0 && blinkT < 0) { blinkT = 0; blinkTimer = Random.Range(2.5f, 5.5f); }
+            float close = 0;
             if (blinkT >= 0)
             {
-                blinkT += Time.deltaTime;
-                float k = blinkT < 0.07f ? 1f - blinkT / 0.07f : (blinkT < 0.14f ? (blinkT - 0.07f) / 0.07f : 1f);
-                float sy = Mathf.Lerp(0.1f, 1f, k);
-                if (eyeL != null) eyeL.localScale = new Vector3(1, sy, 1);
-                if (eyeR != null) eyeR.localScale = new Vector3(1, sy, 1);
-                if (blinkT >= 0.14f) blinkT = -1;
+                blinkT += dt;
+                close = blinkT < 0.07f ? blinkT / 0.07f : (blinkT < 0.16f ? 1f - (blinkT - 0.07f) / 0.09f : 0f);
+                if (blinkT >= 0.16f) blinkT = -1;
             }
-            idleT += Time.deltaTime;
+            float lidAngle = Mathf.Lerp(lidOpen, lidClosed, close);
+            if (lidL != null) lidL.localRotation = Quaternion.Euler(lidAngle, 0, 0);
+            if (lidR != null) lidR.localRotation = Quaternion.Euler(lidAngle, 0, 0);
+
+            // Regard : suit la caméra (avec limites)
+            var cam = Camera.main;
+            if (cam != null && eyeL != null)
+            {
+                Vector3 target = Head.InverseTransformPoint(cam.transform.position);
+                Look(eyeL, eyeBaseL, target);
+                Look(eyeR, eyeBaseR, target);
+            }
+
+            // Respiration / petits mouvements de tête
+            if (Head != null)
+                Head.localRotation = Quaternion.Euler(Mathf.Sin(idleT * 0.7f) * 1.2f, Mathf.Sin(idleT * 0.43f) * 2f, Mathf.Sin(idleT * 0.31f) * 0.8f);
+
+            // Expression : transition douce entre deux sculptures du visage
+            if (exprT < 1f && exprTo != null)
+            {
+                exprT = Mathf.Min(1f, exprT + dt * 2.5f);
+                float k = exprT * exprT * (3 - 2 * exprT);
+                for (int i = 0; i < exprTo.Length; i++) exprCur[i] = Vector3.LerpUnclamped(exprFrom[i], exprTo[i], k);
+                var m = faceFilter.sharedMesh;
+                m.vertices = exprCur;
+                m.RecalculateNormals();
+                smileNow = Mathf.Lerp(smileNow, smileTarget, k);
+            }
         }
 
-        /// <summary>Petite respiration (décalage à ajouter à la pose).</summary>
-        public float Breath { get { return Mathf.Sin(idleT * 1.6f) * 0.0025f; } }
+        void Look(Transform eye, Quaternion baseRot, Vector3 targetLocal)
+        {
+            Vector3 dir = (targetLocal - eye.localPosition).normalized;
+            Vector3 fwd = baseRot * Vector3.forward;
+            float ang = Vector3.Angle(fwd, dir);
+            Vector3 lim = ang > 18f ? Vector3.Slerp(fwd, dir, 18f / ang) : dir;
+            Quaternion want = Quaternion.LookRotation(lim, Vector3.up);
+            eye.localRotation = Quaternion.Slerp(eye.localRotation, want, Time.deltaTime * 8f);
+        }
 
         void OnDestroy()
         {
-            // Libère les maillages générés
-            foreach (var mf in GetComponentsInChildren<MeshFilter>())
-                if (mf.sharedMesh != null && (mf.sharedMesh.name == "" || mf.gameObject.name == "Visage" || mf.gameObject.name == "CuirChevelu"))
-                    Destroy(mf.sharedMesh);
+            foreach (var o in owned) if (o != null) Destroy(o);
         }
     }
 }

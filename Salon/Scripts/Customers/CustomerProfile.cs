@@ -7,7 +7,7 @@ namespace SalonCoiffure
     {
         public string name;
         public Color color;
-        public Shade(string n, string hex) { name = n; color = SalonUtil.Hex(hex); }
+        public Shade(string n, string hex) { name = n; color = SalonMath.Hex(hex); }
     }
 
     public static class Shades
@@ -42,14 +42,14 @@ namespace SalonCoiffure
 
         public static readonly Color[] Skins =
         {
-            SalonUtil.Hex("#F8DDCB"), SalonUtil.Hex("#F0CCB0"), SalonUtil.Hex("#DDAB86"),
-            SalonUtil.Hex("#C48E68"), SalonUtil.Hex("#9A6A4B"), SalonUtil.Hex("#6E4A35"),
+            SalonMath.Hex("#F8DDCB"), SalonMath.Hex("#F0CCB0"), SalonMath.Hex("#DDAB86"),
+            SalonMath.Hex("#C48E68"), SalonMath.Hex("#9A6A4B"), SalonMath.Hex("#6E4A35"),
         };
 
         public static readonly Color[] Eyes =
         {
-            SalonUtil.Hex("#5B3A22"), SalonUtil.Hex("#3B2416"), SalonUtil.Hex("#7A6A3A"),
-            SalonUtil.Hex("#4F7A5A"), SalonUtil.Hex("#4C7FB0"), SalonUtil.Hex("#6E7F8C"),
+            SalonMath.Hex("#5B3A22"), SalonMath.Hex("#3B2416"), SalonMath.Hex("#7A6A3A"),
+            SalonMath.Hex("#4F7A5A"), SalonMath.Hex("#4C7FB0"), SalonMath.Hex("#6E7F8C"),
         };
     }
 
@@ -59,8 +59,10 @@ namespace SalonCoiffure
         public Color skin, eyes;
         public Shade naturalHair;
         public float hairLength, waviness;
+        public bool bangs;
         public int seed;
         public HairRequest request;
+        public FaceParams face;
 
         static readonly string[] Names =
         {
@@ -68,24 +70,50 @@ namespace SalonCoiffure
             "Rose", "Anna", "Juliette", "Margaux", "Sarah", "Emma", "Clara", "Nina", "Mila", "Eva",
         };
 
+        static readonly string[] LipColors = { "#C77079", "#B85A66", "#D4847F", "#A84E5E", "#C9787A", "#9E4A55" };
+        static readonly string[] Shadows = { "#B98A7A", "#A88AA0", "#B08F72", "#C79A93", "#9A8478" };
+
         public static CustomerProfile Random(int seed)
         {
             var rng = new System.Random(seed);
             var p = new CustomerProfile();
             p.seed = seed;
             p.firstName = Names[rng.Next(Names.Length)];
-            p.skin = Shades.Skins[rng.Next(Shades.Skins.Length)];
+            int skinIdx = rng.Next(Shades.Skins.Length);
+            p.skin = Shades.Skins[skinIdx];
             p.eyes = Shades.Eyes[rng.Next(Shades.Eyes.Length)];
-            p.naturalHair = Shades.Natural[rng.Next(Shades.Natural.Length)];
+            // cheveux naturels plausibles selon le teint
+            int hairIdx = skinIdx >= 4 ? rng.Next(0, 3) : rng.Next(Shades.Natural.Length);
+            p.naturalHair = Shades.Natural[hairIdx];
             p.hairLength = 0.36f + (float)rng.NextDouble() * 0.08f;
-            p.waviness = rng.NextDouble() < 0.45 ? (float)rng.NextDouble() * 0.9f : 0f;
+            p.waviness = rng.NextDouble() < 0.4 ? 0.35f + (float)rng.NextDouble() * 0.6f : 0f;
+            p.bangs = rng.NextDouble() < 0.25;
             p.request = HairRequest.Random(rng, p.naturalHair);
+
+            var f = new FaceParams();
+            f.seed = seed;
+            f.skin = p.skin;
+            f.iris = p.eyes;
+            f.brows = Color.Lerp(SalonMath.Mul(p.naturalHair.color, 0.75f), new Color(0.2f, 0.14f, 0.1f), 0.3f);
+            f.scalp = SalonMath.Mul(p.naturalHair.color, 0.8f);
+            Color lip = SalonMath.Hex(LipColors[rng.Next(LipColors.Length)]);
+            f.lips = Color.Lerp(lip, SalonMath.Mul(p.skin, 0.7f), skinIdx >= 4 ? 0.45f : 0.15f);
+            f.shadow = Color.Lerp(SalonMath.Hex(Shadows[rng.Next(Shadows.Length)]), p.skin, 0.25f);
+            f.blush = Color.Lerp(SalonMath.Hex("#F08C8C"), SalonMath.Hex("#E07A6A"), (float)rng.NextDouble());
+            f.blushAmount = 0.2f + (float)rng.NextDouble() * 0.25f;
+            f.liner = rng.NextDouble() < 0.7 ? 0.7f + 0.3f * (float)rng.NextDouble() : 0.25f;
+            f.freckles = (skinIdx <= 1 && rng.NextDouble() < 0.35) ? 0.6f + 0.4f * (float)rng.NextDouble() : 0f;
+            f.jaw = 0.18f + (float)rng.NextDouble() * 0.1f;
+            f.nose = 0.85f + (float)rng.NextDouble() * 0.25f;
+            f.lipFull = 0.9f + (float)rng.NextDouble() * 0.2f;
+            f.eyeSize = 1.04f + (float)rng.NextDouble() * 0.1f;
+            p.face = f;
             return p;
         }
 
         public HairConfig HairConfig()
         {
-            return new HairConfig { natural = naturalHair.color, length = hairLength, waviness = waviness, seed = seed };
+            return new HairConfig { natural = naturalHair.color, length = hairLength, waviness = waviness, bangs = bangs, seed = seed };
         }
     }
 }

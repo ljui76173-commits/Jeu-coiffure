@@ -17,25 +17,29 @@ Aucun asset payant, 0 €.
 
 Pour une mise à jour, retélécharge le zip et recopie le dossier `Salon` en remplaçant les fichiers.
 
-## Ce que contient la V1
+## Nouveautés de la V1.1 (refonte)
 
-- **Salon parisien** : parquet en point de Hongrie, boiseries et moulures, miroir doré, console en marbre,
-  fauteuils en velours, lustre, plantes, tableaux, fenêtre sur les toits de Paris avec la tour Eiffel.
-- **Cliente** générée au hasard : prénom, teint, yeux, couleur et type de cheveux (raides ou ondulés),
-  et une demande précise (carré, carré plongeant, pixie, dégradé, frange rideau, pointes, coloration, balayage).
-- **Cheveux par mèches** : plusieurs milliers de mèches avec reflets anisotropes. Elles sont plus sombres
-  et brillantes quand elles sont mouillées, et bougent légèrement.
-- **Bac à shampoing** : douchette, shampoing qui mousse, rinçage, après-shampoing, serviette.
-- **Coupe** : les ciseaux coupent là où tu passes, et les mèches coupées tombent au sol. La tondeuse
-  a 9 sabots. Tu peux limiter l'outil à une zone (devant, côtés, dessus, nuque).
-- **Coloration** : 12 teintes, peinture au pinceau mèche par mèche, temps de pose, et la couleur
-  apparaît au rinçage.
-- **Séchage** au sèche-cheveux (les mèches s'envolent).
-- **Résultat** : note sur 5 étoiles, avis de la cliente, prix, pourboire.
-- **Photo avant/après** et **galerie** des créations (export PNG).
-- **Options** : nom du salon (affiché sur l'enseigne), volume, qualité. Sauvegarde automatique.
-- Commandes souris **et** tactiles. Clic droit + glisser ou l'outil « Tourner la vue » pour tourner,
-  molette ou les boutons pour zoomer.
+- **Clientes sculptées** : visage d'un seul tenant (nez, lèvres, pommettes, menton), peau peinte
+  (lèvres, sourcils, blush, eye-liner, taches de rousseur), yeux avec iris et cils qui suivent la caméra
+  et clignent. Elle sourit ou fait la moue selon la note. Teint, yeux, maquillage et cheveux sont tirés au hasard.
+- **Cheveux réalistes** : des milliers de mèches-cartes avec une texture de cheveux fins, regroupées en
+  boucles naturelles. Ils encadrent le visage sans le cacher. Ils peuvent être raides, ondulés ou avec frange.
+- **Commandes simples** : appuyer **sur la cliente** utilise l'outil, appuyer **à côté** tourne la vue.
+  Les ciseaux coupent le long du trait dessiné. Les gestes sont environ 2 à 3 fois plus rapides qu'en V1.
+- **Outils en 3D** qui suivent le doigt : ciseaux qui s'ouvrent et se ferment, tondeuse, douchette avec jet d'eau,
+  flacons, pinceau teinté, séchoir.
+- **Repères dorés** autour de la tête qui montrent la hauteur de coupe demandée.
+- **Objectifs** qui se cochent tout seuls, et un bouton doré « Étape suivante » quand l'étape est finie.
+- **Nouvelle interface** : barre d'étapes, fiche cliente avec photo, dock d'outils rond et 26 icônes dessinées.
+- **Image plus belle** : tonemapping ACES, bloom doux, vignette, arrière-plan flou (profondeur de champ).
+
+## Contenu de la V1
+
+- Salon parisien : parquet en point de Hongrie, boiseries, miroir doré, velours, lustre, plantes, vue sur Paris.
+- Bac (douchette, shampoing, rinçage, soin, serviette), coupe (ciseaux, tondeuse 9 sabots, zones),
+  coloration (12 teintes, temps de pose, révélation au rinçage), séchage.
+- Résultat : étoiles, avis, prix, pourboire. Photo avant/après et galerie.
+- Options : nom du salon sur l'enseigne, volumes, qualité. Musique lo-fi et bruitages générés par le code.
 
 ## Feuille de route
 
@@ -48,7 +52,8 @@ Pour une mise à jour, retélécharge le zip et recopie le dossier `Salon` en re
 
 ```
 Salon/
-  Scripts/Core       SalonGame (chef d'orchestre), caméra, matériaux, textures et maillages générés
+  Scripts/Gen        générateurs purs (visage, corps, cheveux, icônes, textures), testables hors Unity
+  Scripts/Core       SalonGame (chef d'orchestre), caméra, post-traitement, matériaux, conversions
   Scripts/World      construction du salon
   Scripts/Customers  cliente (avatar, profil, demande et notation)
   Scripts/Hair       système de mèches, mèches coupées, mousse

@@ -297,6 +297,24 @@ namespace SalonCoiffure
             return t;
         }
 
+        /// <summary>Ombre portée douce (rectangle arrondi flou).</summary>
+        public static Texture2D SoftShadow(int size, float radius, float blur, float alpha)
+        {
+            var t = New(size, size, false, false);
+            var px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float d = RoundRectDist(x + 0.5f, y + 0.5f, size, size, radius + blur) + blur;
+                    float a = Mathf.Clamp01(1f - (d + blur) / (2f * blur));
+                    a = a * a * (3 - 2 * a) * alpha;
+                    px[y * size + x] = new Color(0.12f, 0.08f, 0.06f, a);
+                }
+            t.SetPixels(px);
+            t.Apply(false, false);
+            return t;
+        }
+
         public static Texture2D Solid(Color c)
         {
             var t = new Texture2D(2, 2, TextureFormat.RGBA32, false);

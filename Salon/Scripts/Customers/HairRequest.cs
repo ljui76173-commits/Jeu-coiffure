@@ -18,6 +18,7 @@ namespace SalonCoiffure
     {
         public float maxFoam;
         public float maxCare;
+        public float maxWet;
         public float colorDevelop;
     }
 
@@ -132,7 +133,7 @@ namespace SalonCoiffure
             return "-";
         }
 
-        public ScoreReport Evaluate(HairSystem hair, SessionInfo info, System.Random rng)
+        public ScoreReport Evaluate(HairCore hair, SessionInfo info, System.Random rng)
         {
             var rep = new ScoreReport();
             int n = hair.StrandCount;
@@ -165,7 +166,7 @@ namespace SalonCoiffure
                 float mean = sumAdj / cnt, signed = sumSigned / cnt;
                 float zs = Mathf.Clamp01(1f - mean / 0.05f);
                 cutScore += zs; zonesCount++;
-                string zn = HairSystem.ZoneNames[z];
+                string zn = HairCore.ZoneNames[z];
                 if (zs > 0.8f) rep.lines.Add("✓ " + zn + " : parfait !");
                 else if (signed < 0) rep.lines.Add("✗ " + zn + " : encore trop long (" + ZoneHint(z) + ").");
                 else rep.lines.Add("✗ " + zn + " : un peu trop court…");
